@@ -1,0 +1,88 @@
+#!/bin/bash
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+APP_USER=app
+IMAGE_NAME=zoom
+
+# do we need to use sudo to start docker containers?
+( id -Gn | grep -q docker ) || SUDO=sudo
+
+USER_UID=$(id -u)
+USER_GID=$(id -g)
+
+XSOCK=/tmp/.X11-unix
+XAUTH=/tmp/.docker.xauth
+
+DOWNLOAD_DIR="${HOME}/Downloads"
+
+list_commands() {
+  echo ""
+  echo "Launch zoom using:"
+  echo "  zoom                     OR "
+  echo "  zoom-wrapper zoom"
+  echo ""
+  exit 1
+}
+
+prepare_docker_env_parameters() {
+  ENV_VARS+=" --env=USER_UID=${USER_UID}"
+  ENV_VARS+=" --env=USER_GID=${USER_GID}"
+  ENV_VARS+=" --env=DISPLAY"
+  ENV_VARS+=" --env=XAUTHORITY=${XAUTH}"
+  ENV_VARS+=" --env=TZ=Europe/Paris"
+}
+
+prepare_docker_volume_parameters() {
+  touch ${XAUTH}
+  xauth nlist :0 | sed -e 's/^..../ffff/' | xauth -f ${XAUTH} nmerge -
+
+  VOLUMES+=" --volume=${XSOCK}:${XSOCK}"
+  VOLUMES+=" --volume=${XAUTH}:${XAUTH}"
+  VOLUMES+=" --volume=/run/user/${USER_UID}/pulse:/run/pulse"
+	VOLUMES+=" --volume=${HOME}/.zoom:/home/${APP_USER}/.zoom"
+}
+
+prepare_docker_device_parameters() {
+  # enumerate video devices for webcam support
+  VIDEO_DEVICES=
+  for device in /dev/video*
+  do
+    if [ -c $device ]; then
+      VIDEO_DEVICES="${VIDEO_DEVICES} --device $device"
+    fi
+  done
+}
+
+prog=$(basename $0)
+
+if [[ ${prog} == "zoom-wrapper" ]]; then
+  case ${1} in
+    zoom)
+      prog=${1}
+      shift
+      ;;
+    *|help)
+      list_commands
+      exit 1
+      ;;
+  esac
+fi
+
+echo "Commands ${0}, ${1}, ${2}"
+
+echo "Cleaning up stopped zoom instances..."
+${SUDO} docker rm -f ${IMAGE_NAME}
+
+prepare_docker_env_parameters
+prepare_docker_volume_parameters
+prepare_docker_device_parameters
+
+echo "Starting ${prog}..."
+echo "$VIDEO_DEVICES}"
+${SUDO} docker run -d \
+  --privileged \
+  ${ENV_VARS} \
+  ${VIDEO_DEVICES} \
+  ${VOLUMES} \
+  --name ${IMAGE_NAME} \
+  docker-zoom:63.0.1 ${prog} $@ >/dev/null
