@@ -18,20 +18,6 @@ uninstall_zoom() {
   rm -rf /target/zoom
 }
 
-create_user() {
-  # create group with USER_GID
-  if ! getent group ${APP_USER} >/dev/null; then
-    groupadd -f -g ${USER_GID} ${APP_USER} >/dev/null 2>&1
-  fi
-
-  # create user with USER_UID
-  if ! getent passwd ${APP_USER} >/dev/null; then
-    adduser --disabled-login --uid ${USER_UID} --gid ${USER_GID} \
-      --gecos 'Slack' ${APP_USER} >/dev/null 2>&1
-  fi
-  chown ${APP_USER}:${APP_USER} -R /home/${APP_USER}
-}
-
 grant_access_to_video_devices() {
   for device in /dev/video*
   do
@@ -40,17 +26,18 @@ grant_access_to_video_devices() {
       VIDEO_GROUP=$(stat -c %G $device)
       if [[ ${VIDEO_GROUP} == "UNKNOWN" ]]; then
         VIDEO_GROUP=skypevideo
-        groupadd -g ${VIDEO_GID} ${VIDEO_GROUP}
+        echo $VIDEO_GID
+        sudo groupadd -g ${VIDEO_GID} ${VIDEO_GROUP}
       fi
-      usermod -a -G ${VIDEO_GROUP} ${APP_USER}
+      usermod -a -G ${VIDEO_GROUP} ${UNAME}
       break
     fi
   done
 }
 
 launch_zoom() {
-  cd /home/${APP_USER}
-  PULSE_SERVER=/run/pulse/native QT_GRAPHICSSYSTEM="native" $@
+  cd /home/${UNAME}
+  exec sudo -HEu ${UNAME} QT_GRAPHICSSYSTEM="native" $@
 }
 
 case "$1" in
@@ -62,8 +49,7 @@ case "$1" in
     uninstall_zoom
     ;;
 	zoom)
-    # create_user
-    # grant_access_to_video_devices
+    grant_access_to_video_devices
     launch_zoom $@
     ;;
   *)
