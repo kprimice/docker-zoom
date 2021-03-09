@@ -25,17 +25,20 @@ list_commands() {
 }
 
 prepare_docker_env_parameters() {
-  ENV_VARS+=" --env=DISPLAY"
+  ENV_VARS+=" --env=USER_UID=${USER_UID}"
+  ENV_VARS+=" --env=USER_GID=${USER_GID}"
+  ENV_VARS+=" --env=DISPLAY=${DISPLAY}"
   ENV_VARS+=" --env=XAUTHORITY=${XAUTH}"
   ENV_VARS+=" --env=TZ=Europe/Paris"
 }
 
 prepare_docker_volume_parameters() {
+  chmod 755 $XAUTH
   touch ${XAUTH}
-  xauth nlist :0 | sed -e 's/^..../ffff/' | xauth -f ${XAUTH} nmerge -
+  xauth nlist ${DISPLAY} | sed -e 's/^..../ffff/' | xauth -f ${XAUTH} nmerge -
 
-  VOLUMES+=" --volume=${XSOCK}:${XSOCK}"
-  VOLUMES+=" --volume=${XAUTH}:${XAUTH}"
+  VOLUMES+=" --volume=${XSOCK}"
+  VOLUMES+=" --volume=${XAUTH}"
   VOLUMES+=" --volume=/run/user/${USER_UID}/pulse:/run/user/1000/pulse"
 	VOLUMES+=" --volume=${HOME}/.zoom:/home/${UNAME}/.zoom"
 }
@@ -76,8 +79,8 @@ prepare_docker_volume_parameters
 prepare_docker_device_parameters
 
 echo "Starting ${prog}..."
-echo "$VIDEO_DEVICES}"
 docker run -d -i \
+  --net=host \
   ${ENV_VARS} \
   ${VIDEO_DEVICES} \
   ${VOLUMES} \
